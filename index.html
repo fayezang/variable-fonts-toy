@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>suaniao — dynamic type</title>
+<style>
+  :root{
+    --bg:#fbfbfb; --ink:#0f0f0f; --mut:#9a9a9a; --line:#e4e4e4; --track:#ededed;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased}
+  html,body{height:100%}
+  body{
+    background:var(--bg);color:var(--ink);
+    font-family:"Helvetica Neue",Arial,"PingFang SC",sans-serif;
+    display:flex;flex-direction:column;overflow:hidden;
+  }
+  .wrap{flex:1;display:flex;min-height:0}
+
+  /* ---------- LEFT PANEL ---------- */
+  .panel{
+    width:252px;flex:0 0 252px;padding:16px 20px 16px;
+    display:flex;flex-direction:column;overflow:hidden;
+  }
+  .brand{
+    line-height:1;margin-bottom:16px;
+  }
+  .brand svg{display:block;width:100%;height:auto}
+  /* the little text field row */
+  .textfield{margin-bottom:14px}
+  .textfield input{
+    width:100%;border:none;border-bottom:1px solid var(--ink);background:transparent;
+    font-family:inherit;font-size:14px;padding:4px 0;letter-spacing:.14em;color:var(--ink);
+    text-transform:uppercase;
+  }
+  .textfield input:focus{outline:none}
+
+  /* slider rows: value | track | icon */
+  .rows{margin-top:4px;display:flex;flex-direction:column;gap:14px}
+  .srow{display:flex;align-items:center;gap:10px}
+  .srow .val{width:56px;font-size:13px;font-variant-numeric:tabular-nums;letter-spacing:.02em}
+  .srow .trk{flex:1;position:relative}
+  .srow .ico{width:34px;text-align:right;font-size:14px;font-weight:600;letter-spacing:.02em;color:var(--ink)}
+  input[type=range]{-webkit-appearance:none;width:100%;height:16px;background:transparent;cursor:pointer;display:block}
+  input[type=range]::-webkit-slider-runnable-track{height:5px;background:var(--track);border-radius:0}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:5px;height:16px;border-radius:0;background:var(--ink);margin-top:-5px}
+  input[type=range]::-moz-range-track{height:5px;background:var(--track)}
+  input[type=range]::-moz-range-thumb{width:5px;height:16px;border:none;border-radius:0;background:var(--ink)}
+  .srow .trk .fillbar{position:absolute;left:0;top:50%;height:5px;transform:translateY(-50%);background:#d9d9d9;pointer-events:none}
+  .hint-w{font-size:10px;letter-spacing:.02em;color:var(--mut);margin-top:14px;line-height:1.5}
+
+  /* grid inputs (canvas count) */
+  .gridrow{display:flex;align-items:center;gap:8px;margin-top:22px}
+  .gridrow .cap{font-size:11px;font-weight:600;letter-spacing:.02em;width:56px}
+  .gridrow input{width:40px;border:none;border-bottom:1px solid var(--ink);background:transparent;font-family:inherit;font-size:13px;text-align:center;padding:3px 0;color:var(--ink)}
+  .gridrow input:focus{outline:none}
+  .gridrow .x{color:var(--mut);font-size:12px}
+  .presets{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .presets button{font-size:10px;letter-spacing:.04em;padding:4px 8px;border:1px solid var(--line);background:#fff;cursor:pointer;color:var(--ink);font-family:inherit}
+  .presets button:hover{border-color:var(--ink)}
+
+  .spacer{flex:1}
+  .foot{display:flex;gap:26px;padding-top:12px}
+  .foot button{background:none;border:none;font-family:inherit;font-size:12px;font-weight:600;letter-spacing:.02em;cursor:pointer;color:var(--ink)}
+  .foot button:hover{opacity:.5}
+  .foot button.rec.active{color:#ff3b30}
+  .foot .dotrec{display:inline-block;width:7px;height:7px;border-radius:50%;background:#ff3b30;margin-right:6px;vertical-align:middle;opacity:0}
+  .foot button.rec.active .dotrec{opacity:1;animation:blink 1s steps(2) infinite}
+  @keyframes blink{50%{opacity:.2}}
+
+  /* ---------- STAGE ---------- */
+  .stage{flex:1;position:relative;min-width:0;background:var(--bg)}
+  canvas{display:block;width:100%;height:100%}
+  canvas.hovering{cursor:ew-resize}
+  canvas.dragging{cursor:ew-resize}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <aside class="panel">
+      <div class="brand" id="brand"></div>
+
+      <div class="textfield">
+        <input id="txt" type="text" value="suaniao" spellcheck="false" autocomplete="off">
+      </div>
+
+      <div class="rows">
+        <div class="srow">
+          <span class="val" id="vHeight">100.00</span>
+          <span class="trk"><div class="fillbar" id="fHeight"></div><input type="range" id="rHeight" min="10" max="100" value="100" step="0.01"></span>
+          <span class="ico" title="字高">&#8597;</span>
+        </div>
+        <div class="srow">
+          <span class="val" id="vSplit">50.00</span>
+          <span class="trk"><div class="fillbar" id="fSplit"></div><input type="range" id="rSplit" min="0" max="100" value="50" step="0.01"></span>
+          <span class="ico" title="切分位置">&#8942;</span>
+        </div>
+        <div class="srow">
+          <span class="val" id="vWeight">40.00</span>
+          <span class="trk"><div class="fillbar" id="fWeight"></div><input type="range" id="rWeight" min="1" max="100" value="40" step="0.01"></span>
+          <span class="ico" title="最大笔画粗细">&#9998;</span>
+        </div>
+        <div class="srow">
+          <span class="val" id="vGrad">50.00</span>
+          <span class="trk"><div class="fillbar" id="fGrad"></div><input type="range" id="rGrad" min="0" max="100" value="50" step="0.01"></span>
+          <span class="ico" title="粗细焦点位置">&#8596;</span>
+        </div>
+      </div>
+      <div class="hint-w" style="margin-top:8px">切分滑轨等同点击画布切分；粗细滑轨：焦点最近的字母最粗。</div>
+
+      <div class="hint-w">点击画布切分「整词」的位置，每个字符撑满自己的小画布；拖动切分线可微调比例。</div>
+
+      <div class="gridrow">
+        <span class="cap">CANVAS</span>
+        <input type="number" id="cols" min="1" max="40" value="7">
+        <span class="x">&times;</span>
+        <input type="number" id="rows" min="1" max="40" value="1">
+      </div>
+      <div class="presets">
+        <button data-g="2,2">2×2</button>
+        <button data-g="1,8">1×8</button>
+        <button data-g="9,12">9×12</button>
+        <button data-g="4,1">4×1</button>
+        <button data-g="auto">AUTO</button>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="foot">
+        <button id="btnSvg">SVG</button>
+        <button id="btnRec" class="rec"><span class="dotrec"></span>RECORD</button>
+      </div>
+    </aside>
+
+    <main class="stage">
+      <canvas id="cv"></canvas>
+    </main>
+  </div>
+
+<script>
+(()=>{
+'use strict';
+const CW=800, CH=1000;      // base cell ratio (portrait 800x1000)
+const $=s=>document.querySelector(s);
+
+/* ============================================================
+   GLYPH LIBRARY
+   Each glyph is defined in a 0..1 unit box as LINE subpaths.
+   A glyph is drawn to fill (and overflow) its cell; the
+   POSITION pad warps every glyph by:
+     sx  -> horizontal stretch of the letter (pad X)
+     sy  -> vertical   stretch of the letter (pad Y)
+   Letters are anchored at their centre so they expand
+   symmetrically and can overflow the canvas — exactly like
+   the reference video where "O" goes from a thin tall ellipse
+   to a wide flat ellipse as you drag.
+============================================================ */
+function arc(cx,cy,rx,ry,a0,a1,n){const p=[];n=n||48;for(let i=0;i<=n;i++){const t=a0+(a1-a0)*i/n;p.push([cx+rx*Math.cos(t),cy+ry*Math.sin(t)]);}return p;}
+function smooth(pts,seg){
+  if(pts.length<3)return pts.slice();seg=seg||16;const out=[];const P=pts;
+  const g=i=>P[Math.max(0,Math.min(P.length-1,i))];
+  for(let i=0;i<P.length-1;i++){const p0=g(i-1),p1=g(i),p2=g(i+1),p3=g(i+2);
+    for(let j=0;j<seg;j++){const t=j/seg,t2=t*t,t3=t2*t;
+      out.push([
+        0.5*((2*p1[0])+(-p0[0]+p2[0])*t+(2*p0[0]-5*p1[0]+4*p2[0]-p3[0])*t2+(-p0[0]+3*p1[0]-3*p2[0]+p3[0])*t3),
+        0.5*((2*p1[1])+(-p0[1]+p2[1])*t+(2*p0[1]-5*p1[1]+4*p2[1]-p3[1])*t2+(-p0[1]+3*p1[1]-3*p2[1]+p3[1])*t3)
+      ]);}}
+  out.push(P[P.length-1]);return out;
+}
+const S=pts=>({pts:smooth(pts),close:false});
+const SC=pts=>({pts:smooth([...pts,pts[0],pts[1],pts[2]]).slice(0),close:true});
+const L=(pts,close)=>({pts,close:!!close});
+
+/* ---- font metrics (unit box, y down) ----
+   ASC = ascender / cap top   XT = x-height top
+   BL  = baseline             DESC = descender bottom          */
+const ASC=0.07, XT=0.44, BL=0.85, DESC=1.0;
+const CH2=BL-ASC, MY=(ASC+BL)/2, XMY=(XT+BL)/2, XH=BL-XT;
+const EL=(cx,cy,rx,ry,n)=>({pts:arc(cx,cy,rx,ry,0,2*Math.PI,n||40),close:true});
+
+const G={};
+/* ===== UPPERCASE — humanist hand-drawn ===== */
+G['A']=()=>{const cb=ASC+0.62*CH2;return[L([[0.5,ASC],[0.05,BL]]),L([[0.5,ASC],[0.95,BL]]),L([[0.23,cb],[0.77,cb]])];};
+G['B']=()=>[L([[0.11,ASC],[0.11,BL]]),S([[0.11,ASC],[0.62,ASC],[1.0,ASC+0.13*CH2],[0.6,MY],[0.11,MY]]),S([[0.11,MY],[0.7,MY],[1.06,BL-0.13*CH2],[0.6,BL],[0.11,BL]])];
+G['C']=()=>[S(arc(0.55,MY,0.44,CH2/2,0.5,2*Math.PI-0.5,50))];
+G['D']=()=>[L([[0.11,ASC],[0.11,BL]]),S(arc(0.11,MY,0.84,CH2/2,-Math.PI/2,Math.PI/2,44))];
+G['E']=()=>[L([[0.13,ASC],[0.13,BL]]),L([[0.13,ASC],[0.92,ASC]]),L([[0.13,MY],[0.78,MY]]),L([[0.13,BL],[0.92,BL]])];
+G['F']=()=>[L([[0.13,ASC],[0.13,BL]]),L([[0.13,ASC],[0.92,ASC]]),L([[0.13,MY],[0.78,MY]])];
+G['G']=()=>[S(arc(0.55,MY,0.44,CH2/2,0.5,2*Math.PI-0.5,50)),L([[0.97,MY+0.02],[0.97,MY+0.17]]),L([[0.97,MY+0.17],[0.6,MY+0.17]])];
+G['H']=()=>[L([[0.11,ASC],[0.11,BL]]),L([[0.89,ASC],[0.89,BL]]),L([[0.11,MY],[0.89,MY]])];
+G['I']=()=>[L([[0.5,ASC],[0.5,BL]]),L([[0.31,ASC],[0.69,ASC]]),L([[0.31,BL],[0.69,BL]])];
+G['J']=()=>[L([[0.74,ASC],[0.74,BL-0.16*CH2]]),S(arc(0.44,BL-0.16*CH2,0.3,0.16*CH2,0,Math.PI,26))];
+G['K']=()=>[L([[0.13,ASC],[0.13,BL]]),L([[0.9,ASC],[0.13,MY+0.02]]),L([[0.34,MY-0.05],[0.95,BL]])];
+G['L']=()=>[L([[0.15,ASC],[0.15,BL]]),L([[0.15,BL],[0.9,BL]])];
+G['M']=()=>{const vy=ASC+0.66*CH2;return[L([[0.05,BL],[0.1,ASC],[0.5,vy],[0.9,ASC],[0.95,BL]])];};
+G['N']=()=>[L([[0.11,BL],[0.11,ASC],[0.89,BL],[0.89,ASC]])];
+G['O']=()=>[EL(0.5,MY,0.44,CH2/2,56)];
+G['P']=()=>[L([[0.13,ASC],[0.13,BL]]),S([[0.13,ASC],[0.64,ASC],[1.04,ASC+0.16*CH2],[0.64,ASC+0.34*CH2],[0.13,ASC+0.34*CH2]])];
+G['Q']=()=>[EL(0.5,MY-0.02,0.43,CH2/2-0.02,54),L([[0.6,MY+0.14],[1.0,BL+0.05]])];
+G['R']=()=>[L([[0.13,ASC],[0.13,BL]]),S([[0.13,ASC],[0.64,ASC],[1.04,ASC+0.16*CH2],[0.64,ASC+0.34*CH2],[0.13,ASC+0.34*CH2]]),L([[0.44,ASC+0.34*CH2],[0.95,BL]])];
+G['S']=()=>[S([[0.9,ASC+0.15*CH2],[0.5,ASC],[0.1,ASC+0.2*CH2],[0.5,MY],[0.9,BL-0.2*CH2],[0.5,BL],[0.1,BL-0.15*CH2]])];
+G['T']=()=>[L([[0.04,ASC],[0.96,ASC]]),L([[0.5,ASC],[0.5,BL]])];
+G['U']=()=>{const ay=ASC+0.56*CH2;return[L([[0.11,ASC],[0.11,ay]]),S(arc(0.5,ay,0.39,0.44*CH2,0,Math.PI,32)),L([[0.89,ASC],[0.89,ay]])];};
+G['V']=()=>[L([[0.06,ASC],[0.5,BL],[0.94,ASC]])];
+G['W']=()=>[L([[0.03,ASC],[0.26,BL],[0.5,ASC+0.5*CH2],[0.74,BL],[0.97,ASC]])];
+G['X']=()=>[L([[0.08,ASC],[0.92,BL]]),L([[0.92,ASC],[0.08,BL]])];
+G['Y']=()=>[L([[0.06,ASC],[0.5,ASC+0.5*CH2],[0.94,ASC]]),L([[0.5,ASC+0.5*CH2],[0.5,BL]])];
+G['Z']=()=>[L([[0.08,ASC],[0.92,ASC],[0.08,BL],[0.92,BL]])];
+/* ===== lowercase — two-story humanist ===== */
+G['a']=()=>[EL(0.44,XMY+0.06,0.31,(BL-XMY)*0.94,28),L([[0.74,XT+0.03],[0.74,BL]]),S([[0.74,XT+0.07],[0.54,XT-0.02],[0.35,XT+0.05]])];
+G['b']=()=>[L([[0.13,ASC],[0.13,BL]]),EL(0.53,XMY,0.4,XH/2,30)];
+G['d']=()=>[L([[0.87,ASC],[0.87,BL]]),EL(0.47,XMY,0.4,XH/2,30)];
+G['p']=()=>[L([[0.14,XT],[0.14,DESC]]),EL(0.54,XMY,0.4,XH/2,30)];
+G['q']=()=>[L([[0.86,XT],[0.86,DESC]]),EL(0.46,XMY,0.4,XH/2,30)];
+G['c']=()=>[S(arc(0.57,XMY,0.4,XH/2,0.55,2*Math.PI-0.55,38))];
+G['e']=()=>[S(arc(0.57,XMY,0.4,XH/2,0.55,2*Math.PI-0.55,38)),L([[0.17,XMY],[0.9,XMY-0.02]])];
+G['f']=()=>[S([[0.78,ASC+0.03],[0.52,ASC-0.02],[0.4,ASC+0.14],[0.4,BL]]),L([[0.19,XT],[0.66,XT]])];
+G['g']=()=>[EL(0.5,XMY,0.36,XH/2,28),L([[0.83,XT+0.02],[0.83,0.9]]),S([[0.83,0.9],[0.6,DESC+0.02],[0.28,0.95],[0.15,0.84]])];
+G['h']=()=>[L([[0.14,ASC],[0.14,BL]]),S([[0.14,XT+0.11],[0.45,XT-0.02],[0.75,XT+0.11]]),L([[0.75,XT+0.09],[0.75,BL]])];
+G['n']=()=>[L([[0.16,XT],[0.16,BL]]),S([[0.16,XT+0.11],[0.46,XT-0.02],[0.76,XT+0.11]]),L([[0.76,XT+0.09],[0.76,BL]])];
+G['m']=()=>[L([[0.08,XT],[0.08,BL]]),S([[0.08,XT+0.11],[0.3,XT-0.02],[0.5,XT+0.11]]),L([[0.5,XT+0.09],[0.5,BL]]),S([[0.5,XT+0.11],[0.72,XT-0.02],[0.92,XT+0.11]]),L([[0.92,XT+0.09],[0.92,BL]])];
+G['u']=()=>{const ay=BL-0.14;return[L([[0.16,XT],[0.16,ay]]),S(arc(0.46,ay,0.3,0.14,0,Math.PI,20)),L([[0.76,XT],[0.76,BL]])];};
+G['i']=()=>[L([[0.5,XT],[0.5,BL]]),EL(0.5,XT-0.13,0.055,0.055,12)];
+G['j']=()=>[L([[0.6,XT],[0.6,0.9]]),S(arc(0.35,0.9,0.25,0.12,0,Math.PI,20)),EL(0.6,XT-0.13,0.055,0.055,12)];
+G['k']=()=>[L([[0.16,ASC],[0.16,BL]]),L([[0.82,XT+0.02],[0.16,XT+0.3]]),L([[0.35,XT+0.22],[0.85,BL]])];
+G['l']=()=>[L([[0.5,ASC],[0.5,BL]])];
+G['o']=()=>[EL(0.5,XMY,0.4,XH/2,34)];
+G['r']=()=>[L([[0.2,XT],[0.2,BL]]),S([[0.2,XT+0.13],[0.44,XT-0.02],[0.72,XT+0.06],[0.82,XT+0.18]])];
+G['s']=()=>[S([[0.82,XT+0.12],[0.5,XT],[0.2,XT+0.16],[0.5,XMY],[0.8,BL-0.16],[0.5,BL],[0.18,BL-0.12]])];
+G['t']=()=>[S([[0.5,ASC+0.14],[0.5,BL-0.1],[0.66,BL],[0.82,BL-0.08]]),L([[0.22,XT],[0.74,XT]])];
+G['v']=()=>[L([[0.1,XT],[0.5,BL],[0.9,XT]])];
+G['w']=()=>[L([[0.05,XT],[0.28,BL],[0.5,XMY],[0.72,BL],[0.95,XT]])];
+G['x']=()=>[L([[0.14,XT],[0.86,BL]]),L([[0.86,XT],[0.14,BL]])];
+G['y']=()=>[L([[0.12,XT],[0.5,BL-0.02]]),L([[0.9,XT],[0.5,BL-0.02],[0.24,DESC]])];
+G['z']=()=>[L([[0.16,XT],[0.86,XT],[0.16,BL],[0.86,BL]])];
+/* ===== digits ===== */
+G['0']=()=>[EL(0.5,MY,0.4,CH2/2,50),L([[0.3,BL-0.14],[0.7,ASC+0.14]])];
+G['1']=()=>[L([[0.28,ASC+0.18],[0.54,ASC],[0.54,BL]]),L([[0.24,BL],[0.84,BL]])];
+G['2']=()=>[S([[0.1,ASC+0.18],[0.5,ASC-0.02],[0.9,ASC+0.2],[0.5,MY],[0.08,BL]]),L([[0.06,BL],[0.94,BL]])];
+G['3']=()=>[S([[0.1,ASC+0.1],[0.6,ASC-0.02],[0.9,ASC+0.22],[0.46,MY],[0.92,BL-0.22],[0.58,BL+0.02],[0.08,BL-0.12]])];
+G['4']=()=>[L([[0.7,ASC],[0.06,BL-0.24],[0.96,BL-0.24]]),L([[0.7,ASC],[0.7,BL]])];
+G['5']=()=>[L([[0.86,ASC],[0.2,ASC]]),L([[0.2,ASC],[0.2,ASC+0.4*CH2]]),S([[0.2,ASC+0.4*CH2],[0.66,ASC+0.34*CH2],[0.92,ASC+0.66*CH2],[0.5,BL],[0.08,BL-0.12]])];
+G['6']=()=>[S([[0.82,ASC+0.04],[0.4,ASC],[0.12,MY],[0.12,BL-0.1],[0.46,BL],[0.82,BL-0.06],[0.88,MY+0.14],[0.5,MY-0.02],[0.14,MY+0.1]])];
+G['7']=()=>[L([[0.08,ASC],[0.92,ASC],[0.36,BL]])];
+G['8']=()=>{const m1=ASC+0.28*CH2,m2=ASC+0.72*CH2;return[EL(0.5,m1,0.3,m1-ASC,34),EL(0.5,m2,0.38,BL-m2,34)];};
+G['9']=()=>[S([[0.18,BL-0.04],[0.6,BL],[0.88,MY],[0.88,ASC+0.1],[0.54,ASC],[0.2,ASC+0.06],[0.12,ASC+0.4*CH2],[0.5,MY],[0.86,ASC+0.36*CH2]])];
+/* ===== punctuation & symbols (arrows per reference) ===== */
+G[' ']=()=>[];
+G['.']=()=>[EL(0.5,BL-0.03,0.055,0.055,14)];
+G[',']=()=>[S([[0.56,BL-0.06],[0.5,BL+0.04],[0.38,BL+0.16]])];
+G['!']=()=>[L([[0.5,ASC],[0.5,ASC+0.62*CH2]]),EL(0.5,BL-0.03,0.055,0.055,14)];
+G['?']=()=>[S([[0.12,ASC+0.16],[0.5,ASC-0.02],[0.9,ASC+0.2],[0.5,MY],[0.5,MY+0.14]]),EL(0.5,BL-0.03,0.055,0.055,14)];
+G['@']=()=>[S(arc(0.5,MY,0.44,CH2/2,0.4,2*Math.PI+0.2,44)),EL(0.54,MY+0.02,0.18,0.16,24)];
+G['%']=()=>[L([[0.88,ASC],[0.12,BL]]),EL(0.28,ASC+0.16,0.16,0.16,20),EL(0.72,BL-0.16,0.16,0.16,20)];
+G['#']=()=>[L([[0.34,ASC],[0.24,BL]]),L([[0.74,ASC],[0.64,BL]]),L([[0.12,ASC+0.32*CH2],[0.9,ASC+0.32*CH2]]),L([[0.08,ASC+0.64*CH2],[0.86,ASC+0.64*CH2]])];
+G['&']=()=>[S([[0.94,BL],[0.2,MY],[0.28,ASC+0.06],[0.62,ASC+0.08],[0.54,MY],[0.12,BL-0.1],[0.34,BL+0.02],[0.72,BL-0.14],[0.94,MY+0.1]])];
+G['→']=()=>[L([[0.06,MY],[0.94,MY]]),L([[0.66,MY-0.18],[0.94,MY],[0.66,MY+0.18]])];
+G['←']=()=>[L([[0.94,MY],[0.06,MY]]),L([[0.34,MY-0.18],[0.06,MY],[0.34,MY+0.18]])];
+G['↑']=()=>[L([[0.5,BL],[0.5,ASC]]),L([[0.3,ASC+0.24],[0.5,ASC],[0.7,ASC+0.24]])];
+G['↓']=()=>[L([[0.5,ASC],[0.5,BL]]),L([[0.3,BL-0.24],[0.5,BL],[0.7,BL-0.24]])];
+G['-']=()=>[L([[0.15,XMY],[0.85,XMY]])];
+G['_']=()=>[L([[0.06,BL],[0.94,BL]])];
+G['+']=()=>[L([[0.15,MY],[0.85,MY]]),L([[0.5,MY-0.24],[0.5,MY+0.24]])];
+G['=']=()=>[L([[0.15,MY-0.1],[0.85,MY-0.1]]),L([[0.15,MY+0.1],[0.85,MY+0.1]])];
+G['/']=()=>[L([[0.85,ASC],[0.15,BL]])];
+G['\\']=()=>[L([[0.15,ASC],[0.85,BL]])];
+G['(']=()=>[S(arc(0.7,MY,0.5,CH2/2,Math.PI*0.62,Math.PI*1.38,26))];
+G[')']=()=>[S(arc(0.3,MY,0.5,CH2/2,-Math.PI*0.38,Math.PI*0.38,26))];
+G['[']=()=>[L([[0.64,ASC],[0.36,ASC],[0.36,BL],[0.64,BL]])];
+G[']']=()=>[L([[0.36,ASC],[0.64,ASC],[0.64,BL],[0.36,BL]])];
+G[':']=()=>[EL(0.5,XT+0.06,0.055,0.055,12),EL(0.5,BL-0.04,0.055,0.055,12)];
+G[';']=()=>[EL(0.5,XT+0.06,0.055,0.055,12),S([[0.55,BL-0.08],[0.48,BL+0.02],[0.36,BL+0.14]])];
+G["'"]=()=>[L([[0.52,ASC],[0.46,ASC+0.2]])];
+G['"']=()=>[L([[0.4,ASC],[0.34,ASC+0.2]]),L([[0.62,ASC],[0.56,ASC+0.2]])];
+function glyph(ch){return G[ch]||G[(ch||'').toUpperCase()]||null;}
+
+/* ---------- state ---------- */
+const state={
+  text:'suaniao',
+  height:1.0,      // vertical FILL ratio of each glyph inside its sub-canvas (slider)
+  weight:40,       // MAX stroke weight 1..100 -> px (slider 2)
+  grad:0.5,        // weight-gradient FOCUS position 0..1 across the word (slider 3)
+  cols:7, rows:1, autoRows:false,
+  vsplit:[],       // internal VERTICAL split fractions of total width  (length cols-1)
+  hsplit:[],       // internal HORIZONTAL split fractions of total height (length rows-1)
+};
+const MINGAP=0.04;  // min fraction between two split lines
+function even(n){const a=[];for(let k=1;k<n;k++)a.push(k/n);return a;}
+function ensureSplits(cols,rows){
+  if(!state.vsplit||state.vsplit.length!==cols-1) state.vsplit=even(cols);
+  if(!state.hsplit||state.hsplit.length!==rows-1) state.hsplit=even(rows);
+}
+function resetSplits(){const {cols,rows}=layout();state.vsplit=even(cols);state.hsplit=even(rows);}
+
+function layout(){
+  const chars=[...state.text.replace(/\n/g,'')];
+  let cols=Math.max(1,state.cols|0), rows;
+  if(state.autoRows){rows=Math.max(1,Math.ceil((chars.length||1)/cols));}
+  else{rows=Math.max(1,state.rows|0);}
+  const cells=[];for(let i=0;i<cols*rows;i++)cells.push(chars[i]!==undefined?chars[i]:'');
+  return {cols,rows,cells};
+}
+
+/* MAX stroke weight in cell units: map 1..100 -> ~6..300 */
+function weightMaxPx(){return 6+(state.weight/100)*300;}
+/* per-letter weight: thickest at the gradient FOCUS (state.grad, 0..1 across
+   the word), tapering to a thin floor at the far end. */
+const WFLOOR=0.14;   // farthest letter keeps this fraction of the max weight
+function weightForCol(c,cols){
+  const pos = (cols<=1) ? 0.5 : c/(cols-1);   // 0=left letter … 1=right letter
+  const dist = Math.abs(pos - state.grad);    // 0..1 distance from focus
+  const k = WFLOOR + (1-WFLOOR)*(1-dist);     // 1 at focus → WFLOOR far away
+  return Math.max(2, weightMaxPx()*k);
+}
+
+/* boundary arrays in VIRTUAL px. Total canvas = cols*CW x rows*CH (fixed outer). */
+function VXpx(cols){const WT=cols*CW;ensureSplits(cols,state.rows);return [0,...state.vsplit,1].map(f=>f*WT);}
+function HYpx(rows){const HT=rows*CH;return [0,...state.hsplit,1].map(f=>f*HT);}
+
+/* bounding box of a glyph's raw unit points */
+function glyphBBox(subs){
+  let mnx=1/0,mny=1/0,mxx=-1/0,mxy=-1/0;
+  for(const s of subs)for(const p of s.pts){if(p[0]<mnx)mnx=p[0];if(p[0]>mxx)mxx=p[0];if(p[1]<mny)mny=p[1];if(p[1]>mxy)mxy=p[1];}
+  if(mnx===1/0)return {mnx:0,mny:0,mxx:1,mxy:1};
+  return {mnx,mny,mxx,mxy};
+}
+
+/* map a glyph so it FULLY FILLS the given sub-rectangle (x0,y0,cw,ch_).
+   The glyph's own bbox is stretched edge-to-edge (minus stroke inset), so a
+   single character always spans its whole sub-canvas horizontally, and
+   vertically according to the HEIGHT fill slider. lw = this letter's weight. */
+function cellPaths(ch,x0,y0,cw,ch_,lw){
+  const gen=glyph(ch); if(!gen)return [];
+  const subs=gen()||[]; if(!subs.length)return [];
+  const bb=glyphBBox(subs);
+  const bw=Math.max(1e-4,bb.mxx-bb.mnx), bh=Math.max(1e-4,bb.mxy-bb.mny);
+  const inset=Math.min(lw*0.5, cw*0.45, ch_*0.45);
+  const iw=cw-2*inset, ih=ch_-2*inset;
+  const hfill=Math.min(1,Math.max(0.1,state.height));   // vertical fill ratio
+  const ihh=ih*hfill, yoff=(ih-ihh)/2;
+  const out=[];
+  for(const s of subs){
+    const mapped=s.pts.map(([u,v])=>{
+      const nu=(u-bb.mnx)/bw;      // 0..1 across glyph bbox
+      const nv=(v-bb.mny)/bh;
+      return [x0+inset+nu*iw, y0+inset+yoff+nv*ihh];
+    });
+    out.push({pts:mapped,close:s.close});
+  }
+  return out;
+}
+
+function currentCells(){
+  const {cols,rows,cells}=layout();
+  ensureSplits(cols,rows);
+  const VX=VXpx(cols), HY=HYpx(rows);
+  const groups=[];
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+    const ch=cells[r*cols+c]; if(!ch)continue;
+    const x0=VX[c], y0=HY[r], cw=VX[c+1]-VX[c], ch_=HY[r+1]-HY[r];
+    const lw=weightForCol(c,cols);
+    groups.push({r,c,x0,y0,cw,ch_,lw,paths:cellPaths(ch,x0,y0,cw,ch_,lw)});
+  }
+  return {groups,cols,rows,VX,HY};
+}
+function currentPaths(){ // flat list (kept for compatibility)
+  const {groups,cols,rows}=currentCells();
+  const paths=[];for(const g of groups)for(const p of g.paths)paths.push(p);
+  return {paths,cols,rows};
+}
+
+/* ---------- canvas ---------- */
+const cv=$('#cv'),ctx=cv.getContext('2d');
+let scale=1,offX=0,offY=0;const DPR=Math.max(1,window.devicePixelRatio||1);
+let hoverSplit=null;  // {axis:'v'|'h', idx} split line under cursor
+let overStage=false;  // pointer currently over the canvas (show guides/outline)
+function resize(){const st=$('.stage');cv.width=st.clientWidth*DPR;cv.height=st.clientHeight*DPR;cv.style.width=st.clientWidth+'px';cv.style.height=st.clientHeight+'px';render();}
+function fit(){
+  const {cols,rows}=layout();const VW=cols*CW,VH=rows*CH;
+  const w=cv.width/DPR,h=cv.height/DPR,pad=60;
+  scale=Math.min((w-pad*2)/VW,(h-pad*2)/VH);
+  offX=(w-VW*scale)/2;offY=(h-VH*scale)/2;
+}
+const toVirt=(mx,my)=>[(mx-offX)/scale,(my-offY)/scale];
+function render(){
+  fit();const w=cv.width/DPR,h=cv.height/DPR;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.clearRect(0,0,w,h);ctx.fillStyle='#fbfbfb';ctx.fillRect(0,0,w,h);
+  ctx.save();ctx.translate(offX,offY);ctx.scale(scale,scale);
+  const {groups,cols,rows,VX,HY}=currentCells();
+  const WT=cols*CW,HT=rows*CH;
+
+  // each glyph fully fills its sub-canvas (clip to sub-rect for safety)
+  for(const g of groups){
+    ctx.save();
+    ctx.beginPath();ctx.rect(g.x0,g.y0,g.cw,g.ch_);ctx.clip();
+    ctx.strokeStyle='#0f0f0f';ctx.lineWidth=g.lw;ctx.lineCap='butt';ctx.lineJoin='miter';ctx.miterLimit=10;
+    for(const p of g.paths){if(p.pts.length<1)continue;ctx.beginPath();ctx.moveTo(p.pts[0][0],p.pts[0][1]);for(let i=1;i<p.pts.length;i++)ctx.lineTo(p.pts[i][0],p.pts[i][1]);if(p.close)ctx.closePath();ctx.stroke();}
+    ctx.restore();
+  }
+
+  // ONLY the interior split guide lines — shown on hover, light grey.
+  // The outer cell/canvas edges are never drawn.
+  const showGuides = overStage || !!sdrag;
+  if(showGuides){
+    ctx.lineWidth=1/scale;
+    for(let i=1;i<VX.length-1;i++){
+      const on=hoverSplit&&hoverSplit.axis==='v'&&hoverSplit.idx===i-1;
+      ctx.strokeStyle=on?'#9a9a9a':'#cfcfcf';
+      ctx.beginPath();ctx.moveTo(VX[i],0);ctx.lineTo(VX[i],HT);ctx.stroke();
+    }
+    for(let i=1;i<HY.length-1;i++){
+      const on=hoverSplit&&hoverSplit.axis==='h'&&hoverSplit.idx===i-1;
+      ctx.strokeStyle=on?'#9a9a9a':'#cfcfcf';
+      ctx.beginPath();ctx.moveTo(0,HY[i]);ctx.lineTo(WT,HY[i]);ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+/* ---------- SVG export ---------- */
+function buildSVG(){
+  const {groups,cols,rows}=currentCells();const W=cols*CW,H=rows*CH;
+  let body='';let ci=0;
+  for(const g of groups){
+    const id='cl'+(ci++);
+    const lw=g.lw.toFixed(2);
+    let seg='';
+    for(const p of g.paths){if(!p.pts.length)continue;let d='M'+p.pts.map(pt=>pt[0].toFixed(2)+' '+pt[1].toFixed(2)).join(' L');if(p.close)d+=' Z';
+      seg+=`<path d="${d}" fill="none" stroke="#0f0f0f" stroke-width="${lw}" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="10"/>`;}
+    if(!seg)continue;
+    body+=`<clipPath id="${id}"><rect x="${g.x0.toFixed(2)}" y="${g.y0.toFixed(2)}" width="${g.cw.toFixed(2)}" height="${g.ch_.toFixed(2)}"/></clipPath>`+
+          `<g clip-path="url(#${id})">${seg}</g>`;
+  }
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
+<rect width="${W}" height="${H}" fill="#fbfbfb"/>
+${body}
+</svg>`;
+}
+function download(name,blob){const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1000);}
+
+/* ---------- SPLIT interaction ----------
+   Click anywhere -> move the NEAREST vertical split line to the click X
+   (so the word is re-partitioned at the click point). Drag an existing
+   split line to fine-tune. Vertical splits use X, horizontal use Y. */
+const HITPX=14; // screen px tolerance to grab a split line
+function localXY(e){const rc=cv.getBoundingClientRect();const cx=(e.touches?e.touches[0].clientX:e.clientX)-rc.left;const cy=(e.touches?e.touches[0].clientY:e.clientY)-rc.top;return [cx,cy];}
+function pickSplit(mx,my){
+  const {cols,rows,VX,HY}=currentCells();const WT=cols*CW,HT=rows*CH;
+  // vertical lines (by X)
+  for(let i=1;i<VX.length-1;i++){const sx=offX+VX[i]*scale;if(Math.abs(mx-sx)<=HITPX)return {axis:'v',idx:i-1};}
+  for(let i=1;i<HY.length-1;i++){const sy=offY+HY[i]*scale;if(Math.abs(my-sy)<=HITPX)return {axis:'h',idx:i-1};}
+  return null;
+}
+function clampSplit(arr,idx,val){
+  const lo=(idx>0?arr[idx-1]:0)+MINGAP;
+  const hi=(idx<arr.length-1?arr[idx+1]:1)-MINGAP;
+  return Math.max(lo,Math.min(hi,val));
+}
+function setNearestVSplit(fx){ // fx: fraction 0..1 across width
+  const arr=state.vsplit; if(!arr.length)return;
+  let best=0,bd=1/0;for(let i=0;i<arr.length;i++){const d=Math.abs(arr[i]-fx);if(d<bd){bd=d;best=i;}}
+  arr[best]=clampSplit(arr,best,fx);
+}
+function setNearestHSplit(fy){
+  const arr=state.hsplit; if(!arr.length)return;
+  let best=0,bd=1/0;for(let i=0;i<arr.length;i++){const d=Math.abs(arr[i]-fy);if(d<bd){bd=d;best=i;}}
+  arr[best]=clampSplit(arr,best,fy);
+}
+let sdrag=null; // {axis,idx}
+cv.addEventListener('mouseenter',()=>{overStage=true;render();});
+cv.addEventListener('mousemove',e=>{
+  overStage=true;
+  const [mx,my]=localXY(e);
+  if(sdrag){
+    const {cols,rows}=layout();const [vx,vy]=toVirt(mx,my);
+    if(sdrag.axis==='v'){state.vsplit[sdrag.idx]=clampSplit(state.vsplit,sdrag.idx,vx/(cols*CW));}
+    else{state.hsplit[sdrag.idx]=clampSplit(state.hsplit,sdrag.idx,vy/(rows*CH));}
+    syncSplitSlider();render();return;
+  }
+  const hs=pickSplit(mx,my);
+  const changed=JSON.stringify(hs)!==JSON.stringify(hoverSplit);
+  hoverSplit=hs;
+  cv.style.cursor=hs?(hs.axis==='v'?'ew-resize':'ns-resize'):'crosshair';
+  if(changed)render();
+});
+cv.addEventListener('mouseleave',()=>{overStage=false;if(!sdrag){hoverSplit=null;}render();});
+cv.addEventListener('mousedown',e=>{
+  const [mx,my]=localXY(e);
+  const hs=pickSplit(mx,my);
+  if(hs){sdrag=hs;e.preventDefault();return;}
+  // plain click: re-partition at click point (vertical split by default;
+  // if there are horizontal splits and click is nearer a h-line region, move it too)
+  const {cols,rows}=layout();const [vx,vy]=toVirt(mx,my);
+  if(cols>1) setNearestVSplit(Math.max(0,Math.min(1,vx/(cols*CW))));
+  if(rows>1) setNearestHSplit(Math.max(0,Math.min(1,vy/(rows*CH))));
+  syncSplitSlider();render();e.preventDefault();
+});
+window.addEventListener('mouseup',()=>{sdrag=null;});
+// touch
+cv.addEventListener('touchstart',e=>{const [mx,my]=localXY(e);const hs=pickSplit(mx,my);if(hs){sdrag=hs;}else{const {cols,rows}=layout();const [vx,vy]=toVirt(mx,my);if(cols>1)setNearestVSplit(Math.max(0,Math.min(1,vx/(cols*CW))));if(rows>1)setNearestHSplit(Math.max(0,Math.min(1,vy/(rows*CH))));render();}e.preventDefault();},{passive:false});
+cv.addEventListener('touchmove',e=>{if(!sdrag)return;const [mx,my]=localXY(e);const {cols,rows}=layout();const [vx,vy]=toVirt(mx,my);if(sdrag.axis==='v'){state.vsplit[sdrag.idx]=clampSplit(state.vsplit,sdrag.idx,vx/(cols*CW));}else{state.hsplit[sdrag.idx]=clampSplit(state.hsplit,sdrag.idx,vy/(rows*CH));}render();e.preventDefault();},{passive:false});
+window.addEventListener('touchend',()=>{sdrag=null;});
+
+/* ---------- sliders (value | track | icon) ---------- */
+function bindSlider(rangeId,fillId,valId,fmt,apply){
+  const rEl=$('#'+rangeId),fEl=$('#'+fillId),vEl=$('#'+valId);
+  function upd(){const min=+rEl.min,max=+rEl.max,val=+rEl.value;const pct=(val-min)/(max-min)*100;fEl.style.width=pct+'%';vEl.textContent=fmt(val);apply(val);render();}
+  rEl.addEventListener('input',upd);upd();
+}
+bindSlider('rHeight','fHeight','vHeight',v=>v.toFixed(2),v=>state.height=v/100);
+// SPLIT slider === clicking the canvas: moves the nearest vertical split to this fraction
+bindSlider('rSplit','fSplit','vSplit',v=>v.toFixed(2),v=>{const {cols}=layout();if(cols>1)setNearestVSplit(Math.max(0,Math.min(1,v/100)));});
+bindSlider('rWeight','fWeight','vWeight',v=>v.toFixed(2),v=>state.weight=v);
+bindSlider('rGrad','fGrad','vGrad',v=>v.toFixed(2),v=>state.grad=v/100);
+// keep the SPLIT slider in sync when the canvas is clicked/dragged
+function syncSplitSlider(){
+  const arr=state.vsplit; if(!arr||!arr.length)return;
+  const v=(arr.length===1?arr[0]:arr.reduce((a,b)=>a+b,0)/arr.length)*100;
+  const r=$('#rSplit'),f=$('#fSplit'),vv=$('#vSplit');
+  if(r){r.value=v;f.style.width=v+'%';vv.textContent=v.toFixed(2);}
+}
+
+/* ---------- text + grid ---------- */
+$('#txt').addEventListener('input',e=>{state.text=e.target.value||'';render();});
+$('#cols').addEventListener('input',e=>{state.cols=Math.max(1,+e.target.value||1);state.autoRows=false;resetSplits();render();});
+$('#rows').addEventListener('input',e=>{state.rows=Math.max(1,+e.target.value||1);state.autoRows=false;resetSplits();render();});
+document.querySelectorAll('.presets button').forEach(b=>b.addEventListener('click',()=>{
+  const g=b.dataset.g;if(g==='auto'){state.autoRows=true;}else{const[c,r]=g.split(',').map(Number);state.cols=c;state.rows=r;state.autoRows=false;$('#cols').value=c;$('#rows').value=r;}resetSplits();render();
+}));
+
+/* ---------- export + record ---------- */
+$('#btnSvg').addEventListener('click',()=>download('suaniao.svg',new Blob([buildSVG()],{type:'image/svg+xml'})));
+let anim=false,recorder=null,chunks=[],t0=0;
+function animate(ts){if(!anim)return;if(!t0)t0=ts;const t=(ts-t0)/1000;
+  // sweep the split point + weight-gradient focus, plus height/weight breathing
+  const {cols,rows}=layout();
+  if(cols>1){state.vsplit[0]=clampSplit(state.vsplit,0,0.5+0.42*Math.sin(t*0.8));}
+  const gv=50+50*Math.sin(t*0.7);$('#rGrad').value=gv;$('#rGrad').dispatchEvent(new Event('input'));
+  const hv=55+45*(0.5+0.5*Math.sin(t*0.5));$('#rHeight').value=hv;$('#rHeight').dispatchEvent(new Event('input'));
+  const wv=40+55*(0.5+0.5*Math.sin(t*0.6));$('#rWeight').value=wv;$('#rWeight').dispatchEvent(new Event('input'));
+  requestAnimationFrame(animate);}
+$('#btnRec').addEventListener('click',function(){
+  if(!recorder){anim=true;t0=0;requestAnimationFrame(animate);
+    const stream=cv.captureStream(30);let mime='video/webm;codecs=vp9';if(!MediaRecorder.isTypeSupported(mime))mime='video/webm';
+    recorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:8000000});chunks=[];
+    recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
+    recorder.onstop=()=>download('suaniao.webm',new Blob(chunks,{type:'video/webm'}));
+    recorder.start();this.classList.add('active');this.innerHTML='<span class="dotrec"></span>STOP';
+  }else{recorder.stop();recorder=null;anim=false;this.classList.remove('active');this.innerHTML='<span class="dotrec"></span>RECORD';render();}
+});
+
+/* ---------- brand logo (rendered with the same glyph engine) ---------- */
+function renderBrand(){
+  const word='suaniao';
+  const CWb=100, CHb=125;          // same 800:1000 ratio, small
+  const n=word.length, W=CWb*n, H=CHb;
+  const lw=7;                       // thin brand stroke
+  let body='';
+  for(let i=0;i<n;i++){
+    const gen=glyph(word[i]); if(!gen)continue;
+    const subs=gen()||[]; if(!subs.length)continue;
+    let mnx=1/0,mny=1/0,mxx=-1/0,mxy=-1/0;
+    for(const s of subs)for(const p of s.pts){if(p[0]<mnx)mnx=p[0];if(p[0]>mxx)mxx=p[0];if(p[1]<mny)mny=p[1];if(p[1]>mxy)mxy=p[1];}
+    const bw=Math.max(1e-4,mxx-mnx), bh=Math.max(1e-4,mxy-mny);
+    const x0=i*CWb, inset=lw*0.7, iw=CWb-2*inset, ih=CHb-2*inset;
+    for(const s of subs){
+      if(!s.pts.length)continue;
+      let d='M'+s.pts.map(([u,v])=>{
+        const nu=(u-mnx)/bw, nv=(v-mny)/bh;
+        return (x0+inset+nu*iw).toFixed(1)+' '+(inset+nv*ih).toFixed(1);
+      }).join(' L');
+      if(s.close)d+=' Z';
+      body+=`<path d="${d}" fill="none" stroke="#0f0f0f" stroke-width="${lw}" stroke-linecap="butt" stroke-linejoin="miter"/>`;
+    }
+  }
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${body}</svg>`;
+  const el=document.getElementById('brand'); if(el)el.innerHTML=svg;
+}
+
+/* ---------- init ---------- */
+window.addEventListener('resize',resize);
+renderBrand();
+// start with two RANDOM characters, one sub-canvas each
+(function randomStart(){
+  const pool='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const pick=()=>pool[Math.floor(Math.random()*pool.length)];
+  const two=pick()+pick();
+  state.text=two; state.cols=2; state.rows=1; state.autoRows=false;
+  resetSplits();
+  const t=document.getElementById('txt'); if(t)t.value=two;
+  const cc=document.getElementById('cols'); if(cc)cc.value=2;
+  const rr=document.getElementById('rows'); if(rr)rr.value=1;
+})();
+resize();
+})();
+</script>
+</body>
+</html>
